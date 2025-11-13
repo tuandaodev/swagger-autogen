@@ -5,6 +5,8 @@ const handleFiles = require('./src/handle-files');
 const statics = require('./src/statics');
 const utils = require('./src/utils');
 const handleData = require('./src/handle-data');
+const codeParser = require('./src/code-parser');
+const tables = require('./src/tables');
 const merge = require('deepmerge');
 
 const { platform } = process;
@@ -13,7 +15,8 @@ const symbols = platform === 'win32' ? { success: '', failed: '' } : { success: 
 let options = null;
 let recLang = null;
 
-module.exports = function (args, endpointsFiles, data) {
+// Main export function
+const mainFunction = function (args, endpointsFiles, data) {
     let outputFile = null;
     options = { 
         language: null, 
@@ -26,7 +29,8 @@ module.exports = function (args, endpointsFiles, data) {
         autoResponse: true,
         sortParameters: 'natural',   // in test
         sanitizeOutputData: false,
-        writeOutputFile: true
+        writeOutputFile: true,
+        ...(data || {})
     };
 
     if (args && endpointsFiles) {
@@ -349,7 +353,6 @@ const init = async (outputFile, endpointsFiles, data) => {
         if (!options.disableLogs) {
             console.log('Swagger-autogen:', '\x1b[32m', 'Success ' + symbols.success, '\x1b[0m');
         }
-
         const objDocOrig = {...objDoc}
         try {
             if (options.sanitizeOutputData) {
@@ -373,3 +376,95 @@ const init = async (outputFile, endpointsFiles, data) => {
 const overwriteMerge = (destinationArray, sourceArray, options) => {
     if (destinationArray || sourceArray || options) return sourceArray;
 };
+
+// Set main function as default export
+module.exports = mainFunction;
+
+// Export all functions from code-parser
+module.exports.getUntil = codeParser.getUntil;
+module.exports.getVariablesNode = codeParser.getVariablesNode;
+module.exports.jsParser = codeParser.jsParser;
+module.exports.jsParserEsModule = codeParser.jsParserEsModule;
+module.exports.removeCharacter = codeParser.removeCharacter;
+module.exports.resolvePathVariables = codeParser.resolvePathVariables;
+module.exports.resolveVariableValue = codeParser.resolveVariableValue;
+module.exports.searchInObject = codeParser.searchInObject;
+
+// Export all functions from handle-data
+module.exports.clearData = handleData.clearData;
+module.exports.removeComments = handleData.removeComments;
+module.exports.removeStrings = handleData.removeStrings;
+module.exports.addReferenceToMethods = handleData.addReferenceToMethods;
+module.exports.getQueryIndirectly = handleData.getQueryIndirectly;
+module.exports.getStatus = handleData.getStatus;
+module.exports.getHeader = handleData.getHeader;
+module.exports.getHeaderQueryBody = handleData.getHeaderQueryBody;
+module.exports.getCallbackParameters = handleData.getCallbackParameters;
+module.exports.getPathParameters = handleData.getPathParameters;
+module.exports.functionRecognizerInData = handleData.functionRecognizerInData;
+module.exports.popFunction = handleData.popFunction;
+module.exports.getSwaggerComments = handleData.getSwaggerComments;
+module.exports.removeInsideParentheses = handleData.removeInsideParentheses;
+module.exports.dataConverter = handleData.dataConverter;
+module.exports.setOptions = handleData.setOptions;
+
+// Export all functions from handle-files
+module.exports.readEndpointFile = handleFiles.readEndpointFile;
+module.exports.resolvePathFile = handleFiles.resolvePathFile;
+module.exports.setOptionsFiles = handleFiles.setOptions;
+
+// Export all constants from statics
+module.exports.UNKNOWN = statics.UNKNOWN;
+module.exports.TEMPLATE = statics.TEMPLATE;
+module.exports.SWAGGER_TAG = statics.SWAGGER_TAG;
+module.exports.STRING_BREAKER = statics.STRING_BREAKER;
+module.exports.METHODS = statics.METHODS;
+module.exports.RESERVED_FUNCTIONS = statics.RESERVED_FUNCTIONS;
+module.exports.STRING_QUOTE = statics.STRING_QUOTE;
+module.exports.QUOTES = statics.QUOTES;
+
+// Export all functions from swagger-tags
+module.exports.formatDefinitions = swaggerTags.formatDefinitions;
+module.exports.getLanguage = swaggerTags.getLanguage;
+module.exports.getOpenAPI = swaggerTags.getOpenAPI;
+module.exports.getPath = swaggerTags.getPath;
+module.exports.getMethodTag = swaggerTags.getMethodTag;
+module.exports.getForcedEndpoints = swaggerTags.getForcedEndpoints;
+module.exports.getIgnoreTag = swaggerTags.getIgnoreTag;
+module.exports.getAutoTag = swaggerTags.getAutoTag;
+module.exports.getParametersTag = swaggerTags.getParametersTag;
+module.exports.getProducesTag = swaggerTags.getProducesTag;
+module.exports.getConsumesTag = swaggerTags.getConsumesTag;
+module.exports.getResponsesTag = swaggerTags.getResponsesTag;
+module.exports.getDescription = swaggerTags.getDescription;
+module.exports.getTags = swaggerTags.getTags;
+module.exports.getSecurityTag = swaggerTags.getSecurityTag;
+module.exports.getSummary = swaggerTags.getSummary;
+module.exports.getOperationId = swaggerTags.getOperationId;
+module.exports.getDeprecatedTag = swaggerTags.getDeprecatedTag;
+module.exports.getRequestBodyTag = swaggerTags.getRequestBodyTag;
+module.exports.setLanguage = swaggerTags.setLanguage;
+module.exports.setOpenAPI = swaggerTags.setOpenAPI;
+module.exports.getDisableLogs = swaggerTags.getDisableLogs;
+module.exports.setDisableLogs = swaggerTags.setDisableLogs;
+module.exports.getAutoParameterTag = swaggerTags.getAutoParameterTag;
+
+// Export all functions from tables
+module.exports.getHttpStatusDescription = tables.getHttpStatusDescription;
+
+// Export all functions from utils
+module.exports.fileOrDirectoryExist = utils.fileOrDirectoryExist;
+module.exports.getExtension = utils.getExtension;
+module.exports.getFileContent = utils.getFileContent;
+module.exports.isNumeric = utils.isNumeric;
+module.exports.resolvePatternPath = utils.resolvePatternPath;
+module.exports.stackSymbolRecognizer = utils.stackSymbolRecognizer;
+module.exports.stack0SymbolRecognizer = utils.stack0SymbolRecognizer;
+module.exports.getFirstPosition = utils.getFirstPosition;
+module.exports.popString = utils.popString;
+module.exports.replaceRange = utils.replaceRange;
+module.exports.sortParameters = utils.sortParameters;
+module.exports.removeRegexes = utils.removeRegexes;
+module.exports.backupRegexes = utils.backupRegexes;
+module.exports.restoreRegexes = utils.restoreRegexes;
+module.exports.setOptionsUtils = utils.setOptions;

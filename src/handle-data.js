@@ -222,6 +222,34 @@ function clearData(data, imports) {
                         expressAsyncHandler = imports[idx].varFileName;
                     }
                 }
+                
+                // Also check for local asyncHandler imports
+                if (!expressAsyncHandler) {
+                    for (let impIdx = 0; impIdx < imports.length; impIdx++) {
+                        let imp = imports[impIdx];
+                        // Check if it's a local file import (not a package)
+                        if (imp.fileName && (imp.fileName.startsWith('./') || imp.fileName.startsWith('../') || imp.fileName.startsWith('/'))) {
+                            // Check exports for asyncHandler or similar names
+                            if (imp.exports && imp.exports.length > 0) {
+                                for (let expIdx = 0; expIdx < imp.exports.length; expIdx++) {
+                                    let exp = imp.exports[expIdx];
+                                    let varName = exp.varName || exp.varAlias;
+                                    // Common async handler function names (case-insensitive match)
+                                    if (varName && varName.toLowerCase() === 'asynchandler') {
+                                        expressAsyncHandler = varName;
+                                        break;
+                                    }
+                                }
+                            }
+                            // Also check varFileName for default imports
+                            if (!expressAsyncHandler && imp.varFileName && imp.varFileName.toLowerCase() === 'asynchandler') {
+                                expressAsyncHandler = imp.varFileName;
+                            }
+                        }
+                        if (expressAsyncHandler) break;
+                    }
+                }
+                
                 if (expressAsyncHandler) {
                     aData = aData.split(new RegExp(`\\s*\\n*\\t*${expressAsyncHandler}\\s*\\n*\\t*\\(`));
                     aData = aData.join(' ');

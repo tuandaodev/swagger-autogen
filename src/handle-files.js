@@ -659,15 +659,17 @@ function readEndpointFile(filePath, pathRoute = '', relativePath, receivedRouteM
                                             func: funcNotReferenced
                                         });
                                     }
-                                } else {
-                                    break;
-                                }
+                                        } else {
+                                            break;
+                                        }
                             }
 
                             // endpointSwaggers: Keep 'global' #swaggers in the endpoints, such as: foo.get('/path', /* #swagger.description = "..." */ functions...)
                             endpointSwaggers = await handleData.getSwaggerComments(functionsStr);
                             functionsStr = await handleData.removeComments(functionsStr);
-                            functions = [...functions, ...functionsStr.split(',')];
+                            let additionalFunctions = functionsStr.split(',');
+                            functions = [...functions, ...additionalFunctions];
+                            
 
                             if (predefMethod == 'use' && endpointSwaggers && routeMiddlewares.length > 0) {
                                 routeMiddlewares[0].func += endpointSwaggers;
@@ -831,6 +833,32 @@ function readEndpointFile(filePath, pathRoute = '', relativePath, receivedRouteM
                             }
 
                             // If found, so is a reference to another file
+                            // Fallback: If function not found in exports but ends with 'Controller',
+                            // try to find a matching controller file in imports
+                            if ((idx == -1 && !exportPath) && varFileName && varFileName.endsWith('Controller')) {
+                                // Extract potential module name from function name (e.g., 'updateUserController' -> 'User')
+                                let moduleName = varFileName.replace(/Controller$/, '').replace(/^(get|post|put|patch|delete|update|create|remove|assign)/i, '');
+                                
+                                // Try to find a controller file that matches the module name
+                                let controllerImport = importedFiles.find(imp => 
+                                    imp.fileName && (
+                                        imp.fileName.includes('.controller') ||
+                                        (moduleName && imp.fileName.toLowerCase().includes(moduleName.toLowerCase()) && imp.fileName.includes('controller'))
+                                    )
+                                );
+                                
+                                // If no match found by module name, try to find any controller file
+                                if (!controllerImport) {
+                                    controllerImport = importedFiles.find(imp => 
+                                        imp.fileName && imp.fileName.includes('.controller')
+                                    );
+                                }
+                                
+                                if (controllerImport) {
+                                    exportPath = controllerImport.fileName;
+                                }
+                            }
+                            
                             if (idx > -1 || exportPath) {
                                 /**
                                  * Bringing reference
@@ -2492,7 +2520,7 @@ function functionRecognizerInFile(filePath, functionName, isRecursive = true) {
             }
 
             /**
-             * Removing express-async-handler function
+             * Removing express-async-handler function and local asyncHandler imports
              */
             let expressAsyncHandler = null;
             let imports = await getImportedFiles(data, filePath);
