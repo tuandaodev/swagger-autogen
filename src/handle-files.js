@@ -114,18 +114,55 @@ function readEndpointFile(filePath, pathRoute = '', relativePath, receivedRouteM
 
             aDataToClean = [...aDataToClean]; // converting to array
             for (let idxData = 0; idxData < aDataToClean.length; ++idxData) {
-                let data = aDataToClean[idxData];
-                let swaggerComments = await handleData.getSwaggerComments(data);
-                data = await handleData.removeComments(data);
+                try {
+                    let data = aDataToClean[idxData];
+                    if (!data) {
+                        continue;
+                    }
+                    
+                    // Extract swagger comments first, before any processing that might fail
+                    let swaggerComments = await handleData.getSwaggerComments(data);
+                    
+                    // Skip if data is too large (likely a parsing error with complex functions)
+                    // This prevents one complex function from breaking the entire file parsing
+                    // But we still preserve the swagger comments we extracted
+                    if (data.length > 50000) {
+                        // Very large function body, skip detailed processing but preserve swagger comments
+                        if (swaggerComments && swaggerComments.trim() !== '') {
+                            // Try to preserve swagger comments even if we skip the function body processing
+                            let originalPattern = '(' + aDataToClean[idxData] + ')';
+                            // Only replace if the pattern exists to avoid corrupting the data
+                            if (aData.includes(originalPattern)) {
+                                let simpleData = '(' + aDataToClean[idxData] + (swaggerComments !== '' ? '\n' + swaggerComments : '') + ')';
+                                aData = aData.replace(originalPattern, simpleData);
+                            }
+                        }
+                        continue;
+                    }
+                    
+                    data = await handleData.removeComments(data);
 
-                // Avoiding ploblems when functions has the same name of a .methods
-                for (let idxMet = 0; idxMet < statics.METHODS.length; ++idxMet) {
-                    let method = statics.METHODS[idxMet];
-                    data = data.split(new RegExp('\\.\\s*\\n*\\t*' + method));
-                    data = data.join('.{_{__function__}_}' + method);
+                    // Avoiding ploblems when functions has the same name of a .methods
+                    for (let idxMet = 0; idxMet < statics.METHODS.length; ++idxMet) {
+                        let method = statics.METHODS[idxMet];
+                        data = data.split(new RegExp('\\.\\s*\\n*\\t*' + method));
+                        data = data.join('.{_{__function__}_}' + method);
+                    }
+                    data = '(' + data + (swaggerComments !== '' ? '\n' + swaggerComments : '') + ')';
+                    
+                    // Use replace instead of replaceAll for safety, and only if pattern exists
+                    let originalPattern = '(' + aDataToClean[idxData] + ')';
+                    if (aData.includes(originalPattern)) {
+                        aData = aData.replace(originalPattern, data);
+                    }
+                } catch (err) {
+                    // If processing one function fails, continue with others
+                    // This prevents one problematic function from breaking the entire file
+                    if (!globalOptions.disableLogs) {
+                        console.warn(`[swagger-autogen]: Warning: Failed to process function body at index ${idxData}, continuing with other functions...`);
+                    }
+                    continue;
                 }
-                data = '(' + data + (swaggerComments !== '' ? '\n' + swaggerComments : '') + ')';
-                aData = aData.replaceAll('(' + aDataToClean[idxData] + ')', data);
             }
 
             /**
@@ -2523,6 +2560,7 @@ function functionRecognizerInFile(filePath, functionName, isRecursive = true) {
              * Removing express-async-handler function and local asyncHandler imports
              */
             let expressAsyncHandler = null;
+            let localAsyncHandler = null;
             let imports = await getImportedFiles(data, filePath);
             let idx = imports.findIndex(e => e.fileName == 'express-async-handler');
             if (idx > -1) {
@@ -2533,11 +2571,47 @@ function functionRecognizerInFile(filePath, functionName, isRecursive = true) {
                 }
             }
 
+            // Check for local asyncHandler imports (custom asyncHandler functions)
+            // Look for imports like: import { asyncHandler } from './async.handler'
+            let localIdx = imports.findIndex(e => {
+                if (e.exports && Array.isArray(e.exports)) {
+                    return e.exports.some(exp => exp.varName === 'asyncHandler' || exp.varAlias === 'asyncHandler');
+                }
+                if (e.varFileName === 'asyncHandler') {
+                    return true;
+                }
+                if (e.fileName && (e.fileName.includes('async.handler') || e.fileName.includes('asyncHandler'))) {
+                    return true;
+                }
+                return false;
+            });
+            if (localIdx > -1) {
+                if (imports[localIdx].exports && Array.isArray(imports[localIdx].exports) && imports[localIdx].exports.length > 0) {
+                    let asyncHandlerExport = imports[localIdx].exports.find(exp => exp.varName === 'asyncHandler' || exp.varAlias === 'asyncHandler');
+                    if (asyncHandlerExport) {
+                        // Use the alias if present, otherwise use the varName
+                        localAsyncHandler = asyncHandlerExport.varAlias || asyncHandlerExport.varName || 'asyncHandler';
+                    } else {
+                        // Fallback: if file contains asyncHandler in name, assume the export name is asyncHandler
+                        localAsyncHandler = 'asyncHandler';
+                    }
+                } else if (imports[localIdx].varFileName) {
+                    localAsyncHandler = imports[localIdx].varFileName;
+                } else {
+                    // Fallback: if file name suggests asyncHandler, use 'asyncHandler'
+                    localAsyncHandler = 'asyncHandler';
+                }
+            }
+
             try {
                 let cleanedData = data;
                 cleanedData = await handleData.removeComments(cleanedData, true);
                 if (expressAsyncHandler) {
                     cleanedData = cleanedData.split(new RegExp(`\\s*=\\s*${expressAsyncHandler}\\s*\\(`));
+                    cleanedData = cleanedData.join(' = (');
+                }
+                if (localAsyncHandler) {
+                    cleanedData = cleanedData.split(new RegExp(`\\s*=\\s*${localAsyncHandler}\\s*\\(`));
                     cleanedData = cleanedData.join(' = (');
                 }
                 cleanedData = cleanedData.replaceAll(' async ', ' ');
